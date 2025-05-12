@@ -538,7 +538,7 @@
 ### GUI.for.Cores 文档路径列表(第三方，无在线文档)
 
 - // 插件列表
-Bubble-droid/telegram-bot-gemini/refs/heads/main/docs/plugin-list.md
+Bubble-droid/Telegram-Bot-Gemini/refs/heads/main/docs/plugin-list.md
 
 ## Common Issues and Solutions
 

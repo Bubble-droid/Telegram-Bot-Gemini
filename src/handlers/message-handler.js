@@ -239,7 +239,7 @@ export async function handleBotMentionQuestion(
 
 		const botReplyMessageContent = { role: 'assistant', content: geminiReplyText }; //  机器人回复消息内容
 
-		await updateUserContextHistory(contextKv, imageDataKv, chatId, userId, [messageContent, botReplyMessageContent]); //  记录机器人回复消息
+		await updateUserContextHistory(contextKv, chatId, userId, [messageContent, botReplyMessageContent]); //  记录机器人回复消息
 	} catch (e) {
 		console.error('提问处理失败: ', e);
 		await sendTelegramMessage(botToken, chatId, `\`${e.message ? e.message : e}\``, replyToMessageId, 'HTML'); //  发送错误消息
@@ -346,7 +346,7 @@ export async function handleUniversalMessage(
 
 	if (!messageContent) return new Response('OK');
 
-	if (messageContent) await updateUserContextHistory(contextKv, imageDataKv, chatId, userId, [messageContent]);
+	if (messageContent) await updateUserContextHistory(contextKv, chatId, userId, [messageContent]);
 
 	return new Response('OK');
 }

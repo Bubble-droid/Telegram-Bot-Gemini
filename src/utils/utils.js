@@ -1,7 +1,6 @@
 // src/utils/utils.js
 
 import { escapeHtml } from './formatter';
-import { recordGroupMessage } from '../summary/summarization-handler';
 import { sendTelegramMessage } from '../api/telegram-api';
 
 /**
@@ -305,107 +304,6 @@ export async function sendErrorNotification(env, e, context) {
 	} else {
 		console.warn('未配置维护人员用户 ID，无法发送错误通知:', context, '-', e.message);
 		console.warn('原始错误:', e); //  同时打印原始错误
-	}
-}
-
-/**
- * 封装记录机器人回复消息的函数 (避免代码重复)
- * @param {KVNamespace} env  Cloudflare Worker environment
- * @param {string} botName 机器人名称
- * @param {string} replyText 机器人回复文本
- * @param {number} groupId 群组 ID
- * @returns {Promise<void>}
- */
-export async function recordBotReplyMessage(env, botName, replyText, groupId) {
-	//  !!!  修改为 env 参数 !!!
-	const botReplyMessage = {
-		chat: { id: groupId, type: 'group' },
-		from: {
-			id: 0,
-			first_name: botName,
-			is_bot: true,
-		},
-		text: replyText,
-		date: Math.floor(Date.now() / 1000),
-	};
-	await recordGroupMessage(env, botReplyMessage); //  !!!  传递 env !!!
-}
-
-/**
- * 处理冷却回复并清理消息 (通用函数) -  修改为使用 KV 轮询实现延迟删除
- * @param {string} botToken Telegram Bot Token
- * @param {number} chatId  Chat ID
- * @param {string} replyText  回复文本
- * @param {number} commandMessageId  命令消息 ID
- * @param {function} sendTelegramMessage  发送 Telegram 消息的函数
- * @param {function} deleteTelegramMessage  删除 Telegram 消息的函数
- * @param {KVNamespace} botConfigKv  BOT_CONFIG KV 命名空间
- * @param {number} replyToMessageId  回复消息 ID (可选)
- * @returns {Promise<void>}
- */
-export async function handleCooldownReplyAndCleanup(
-	botToken,
-	chatId,
-	replyText,
-	commandMessageId,
-	sendTelegramMessage,
-	deleteTelegramMessage,
-	env,
-	replyToMessageId = null,
-) {
-	//  !!!  新增 taskQueueKv 参数 !!!
-	console.log('开始处理冷却提示和清理消息 (KV 轮询延迟)...');
-	const sendResult = await sendTelegramMessage(botToken, chatId, replyText, replyToMessageId, 'HTML'); //  发送回复消息
-	if (sendResult.ok && sendResult.message_id) {
-		const botReplyMessageId = sendResult.message_id; //  获取机器人回复消息 ID
-		console.log(`机器人回复消息 ID: ${botReplyMessageId}`);
-
-		const deletionReadyTimestamp = Date.now() + 3000; //  3 秒后的时间戳
-		const deletionSignalKey = `delete_message:${chatId}:${commandMessageId}:${botReplyMessageId}`; //  唯一的 KV 键
-		const taskQueueKv = env.TASK_QUEUE_KV; //  !!!  从 env 中获取 taskQueueKv !!!
-		await putJsonToKv(taskQueueKv, deletionSignalKey, {
-			chatId: chatId,
-			commandMessageId: commandMessageId,
-			botReplyMessageId: botReplyMessageId,
-			deletionReadyTimestamp: deletionReadyTimestamp,
-		});
-		console.log(`已存储消息删除指令到 KV，key: ${deletionSignalKey}, 删除就绪时间戳: ${deletionReadyTimestamp}`);
-
-		//  !!!  使用 KV 轮询实现延迟删除  !!!
-		console.log('开始 KV 轮询检测删除就绪时间...');
-		const delayCheckInterval = 1000; //  轮询间隔 500 毫秒
-		let deletionTriggered = false; //  标记是否已触发删除，避免重复删除
-
-		while (true) {
-			//  无限循环，直到删除操作完成
-			const now = Date.now();
-			const storedDeletionSignal = await getJsonFromKv(taskQueueKv, deletionSignalKey); //  每次循环都从 KV 读取最新的删除指令
-			if (storedDeletionSignal && now >= storedDeletionSignal.deletionReadyTimestamp && !deletionTriggered) {
-				//  检查时间是否到达，并且尚未触发删除
-				console.log(`删除就绪时间已到，开始删除消息... (当前时间: ${now}, 删除就绪时间: ${storedDeletionSignal.deletionReadyTimestamp})`);
-
-				await deleteTelegramMessage(botToken, chatId, storedDeletionSignal.botReplyMessageId); //  删除机器人回复消息
-				await taskQueueKv.delete(deletionSignalKey); //  删除 KV 中的删除指令
-				console.log(
-					`用户命令消息 (ID: ${storedDeletionSignal.commandMessageId}) 和机器人回复消息 (ID: ${storedDeletionSignal.botReplyMessageId}) 删除完成`,
-				);
-				deletionTriggered = true; //  标记为已触发删除
-				break; //  跳出循环，完成删除操作
-			} else {
-				//  时间未到，或删除指令不存在，则等待一段时间后再次检查
-				//  如果删除指令已被其他请求处理 (例如，由于网络延迟导致重复请求)，则 storedDeletionSignal 可能为 null，此时也应该跳出循环，避免无限循环
-				if (!storedDeletionSignal) {
-					console.log('KV 中删除指令已不存在，跳出轮询');
-					break; //  跳出循环
-				}
-				// console.log(`删除就绪时间未到，等待 ${delayCheckInterval} 毫秒后再次检查... (当前时间: ${now}, 删除就绪时间: ${storedDeletionSignal.deletionReadyTimestamp})`); //  减少日志输出
-				await new Promise((resolve) => setTimeout(resolve, delayCheckInterval)); //  等待一段时间
-			}
-		} //  while 循环 结束
-
-		console.log('KV 轮询延迟删除处理完成');
-	} else {
-		console.error('发送命令回复消息失败，无法进行消息清理 (KV 轮询延迟)'); //  如果回复消息发送失败，则无法进行消息清理
 	}
 }
 

@@ -4,7 +4,6 @@ import {
 	addGroupToWhitelist,
 	isUserWhitelisted,
 	removeGroupFromWhitelist,
-	putJsonToKv,
 	getJsonFromKv,
 	isUserBlacklisted,
 	addUserToBlacklist,
@@ -18,8 +17,6 @@ import { scheduleDeletion } from '../utils/scheduler';
 export const botCommands = [
 	{ command: 'start', description: '查看机器人介绍和使用方法' },
 	{ command: 'help', description: '查看可用命令列表' },
-	// { command: 'search', description: '使用 Google 搜索' },
-	// { command: 'exp_img', description: '实验性图片生成' },
 	{ command: 'clear_user_context', description: '清理您在本群组的历史上下文' },
 	{ command: 'clear_group_context', description: '清理本群组中所有用户的历史上下文(白名单用户)' },
 	{ command: 'whitelist_group', description: '将当前群组加入白名单 (白名单用户)' },
@@ -58,12 +55,11 @@ export async function handleBotCommand(
 	console.log('进入命令处理器 handleBotCommand');
 	try {
 		const botCommandPrefix = '/'; //  定义命令前缀
-		const messageText = message.text || message.caption || ''; // 获取消息文本
+
 		const botNameMention = `@${botName}`; //  完整的 @botName 提及
 		const botNameMentionLowerCase = botNameMention.toLowerCase(); //  !!!  添加小写 botNameMention 用于忽略大小写匹配 !!!
 
 		let command = '';
-		let isBotCommand = false; // 标记是否为 Bot 命令
 
 		const entitiesToCheck = message.entities ? message.entities : message.caption_entities ? message.caption_entities : [];
 
@@ -77,7 +73,7 @@ export async function handleBotCommand(
 					if (normalizedCommandText.startsWith(botCommandPrefix) && normalizedCommandText.includes(botNameMentionLowerCase)) {
 						// !!! 检查命令是否以 / 开头 并且 包含 @botname (忽略大小写) !!!
 						command = commandText.replace(botNameMention, '').substring(botCommandPrefix.length).trim().toLowerCase(); // 提取命令，移除 @botName, 去除前缀 '/', 转小写
-						isBotCommand = true;
+
 						break; // 找到第一个 bot_command entity 即可，跳出循环
 					} else {
 						console.log(`检测到 bot 命令：${commandText}, 但不是针对本 Bot, 忽略 `); // 更详细的日志
@@ -171,28 +167,6 @@ export async function handleBotCommand(
 
 				await sendTelegramMessage(botToken, chatId, replyText, replyToMessageId, 'HTML'); // 发送回复
 				break;
-
-			// case 'exp_img':
-			// 	replyText = `😅 **抱歉！图片生成功能暂不可用...**`;
-			// 	await sendTelegramMessage(botToken, chatId, replyText, replyToMessageId, 'HTML');
-			//
-			// 	await handleImageGeneration(
-			// 		env,
-			// 		message,
-			// 		userId,
-			// 		chatId,
-			// 		replyToMessageId,
-			// 		botToken,
-			// 		botName,
-			// 		botConfigKv,
-			// 		isGroupInCooldown,
-			// 		userWhitelistKey,
-			// 		cooldownDuration,
-			// 		sendTelegramMessage,
-			// 		deleteTelegramMessage,
-			// 		recordGroupRequestTimestamp,
-			// 	);
-			// 	break;
 			case 'clear_user_context': //  !!!  新增 clear_user_context 命令处理 !!!
 				console.log(`收到清理用户上下文命令，用户 ID: ${userId}, 群组 ID: ${chatId}`);
 				await clearUserContextHistory(env, botToken, contextKv, chatId, userId, replyToMessageId);
@@ -219,12 +193,6 @@ export async function handleBotCommand(
 				await scheduleDeletion(env, botToken, chatId, sendMessage?.message_id, 10 * 1000);
 				await scheduleDeletion(env, botToken, chatId, replyToMessageId, 10 * 1000);
 				break;
-			// case 'search': //  !!!  search 命令的处理 !!!
-			// 	replyText = `😅 **抱歉！搜索功能正在维护中...**`;
-			// 	await sendTelegramMessage(botToken, chatId, replyText, replyToMessageId, 'HTML');
-			// 	break;
-			// console.log('handleBotCommand: 检测到 /search 命令，调用 handleSearchCommand 处理');
-			// return handleSearchCommand(message, env, botName, sendTelegramMessage, modelName, deleteTelegramMessage, taskQueueKv);
 			case 'ban': //  !!!  ban 命令处理  !!!
 				await handleBanCommand(message, env, botName); //  !!!  调用 handleBanCommand 函数 !!!
 				break;
@@ -271,7 +239,7 @@ async function handleBanCommand(message, env, botName) {
 	}
 
 	await addUserToBlacklist(botConfigKv, userBlacklistKey, targetUserId); //  添加到黑名单
-	const replyText = `✅ 用户 \`${targetUserId}\` 已加入黑名单。`;
+	// const replyText = `✅ 用户 \`${targetUserId}\` 已加入黑名单。`;
 
 	return new Response('OK');
 }
@@ -302,87 +270,7 @@ async function handleUbanCommand(message, env, botName) {
 	}
 
 	await removeUserFromBlacklist(botConfigKv, userBlacklistKey, targetUserId); //  从黑名单移除
-	const replyText = `✅ 用户 \`${targetUserId}\` 已从黑名单移除。`;
+	// const replyText = `✅ 用户 \`${targetUserId}\` 已从黑名单移除。`;
 
 	return new Response('OK');
-}
-
-/**
- * 处理命令回复并清理消息 (通用函数) -  修改为使用 KV 轮询实现延迟删除
- * @param {string} botToken Telegram Bot Token
- * @param {number} chatId  Chat ID
- * @param {string} replyText  回复文本
- * @param {number} commandMessageId  命令消息 ID
- * @param {function} sendTelegramMessage  发送 Telegram 消息的函数
- * @param {function} deleteTelegramMessage  删除 Telegram 消息的函数
- * @param {KVNamespace} botConfigKv  BOT_CONFIG KV 命名空间
- * @param {number} replyToMessageId  回复消息 ID (可选)
- * @returns {Promise<void>}
- */
-export async function handleCommandReplyAndCleanup(
-	botToken,
-	chatId,
-	replyText,
-	commandMessageId,
-	sendTelegramMessage,
-	deleteTelegramMessage,
-	env,
-	replyToMessageId = null,
-	botName,
-) {
-	//  !!!  新增 taskQueueKv 参数 !!!
-	console.log('开始处理命令回复和清理消息 (KV 轮询延迟)...');
-	const sendResult = await sendTelegramMessage(botToken, chatId, replyText, replyToMessageId, 'HTML'); //  发送回复消息
-	if (sendResult.ok && sendResult.message_id) {
-		const botReplyMessageId = sendResult.message_id; //  获取机器人回复消息 ID
-		console.log(`机器人回复消息 ID: ${botReplyMessageId}`);
-
-		const deletionReadyTimestamp = Date.now() + 3000; //  3 秒后的时间戳
-		const deletionSignalKey = `delete_message:${chatId}:${commandMessageId}:${botReplyMessageId}`; //  唯一的 KV 键
-		const taskQueueKv = env.TASK_QUEUE_KV; //  !!!  从 env 中获取 taskQueueKv !!!
-		await putJsonToKv(taskQueueKv, deletionSignalKey, {
-			chatId: chatId,
-			commandMessageId: commandMessageId,
-			botReplyMessageId: botReplyMessageId,
-			deletionReadyTimestamp: deletionReadyTimestamp,
-		});
-		console.log(`已存储消息删除指令到 KV，key: ${deletionSignalKey}, 删除就绪时间戳: ${deletionReadyTimestamp}`);
-
-		//  !!!  使用 KV 轮询实现延迟删除  !!!
-		console.log('开始 KV 轮询检测删除就绪时间...');
-		const delayCheckInterval = 1000; //  轮询间隔 500 毫秒
-		let deletionTriggered = false; //  标记是否已触发删除，避免重复删除
-
-		while (true) {
-			//  无限循环，直到删除操作完成
-			const now = Date.now();
-			const storedDeletionSignal = await getJsonFromKv(taskQueueKv, deletionSignalKey); //  每次循环都从 KV 读取最新的删除指令
-			if (storedDeletionSignal && now >= storedDeletionSignal.deletionReadyTimestamp && !deletionTriggered) {
-				//  检查时间是否到达，并且尚未触发删除
-				console.log(`删除就绪时间已到，开始删除消息... (当前时间: ${now}, 删除就绪时间: ${storedDeletionSignal.deletionReadyTimestamp})`);
-
-				await deleteTelegramMessage(botToken, chatId, storedDeletionSignal.commandMessageId); //  删除用户命令消息
-				await deleteTelegramMessage(botToken, chatId, storedDeletionSignal.botReplyMessageId); //  删除机器人回复消息
-				await taskQueueKv.delete(deletionSignalKey); //  删除 KV 中的删除指令
-				console.log(
-					`用户命令消息 (ID: ${storedDeletionSignal.commandMessageId}) 和机器人回复消息 (ID: ${storedDeletionSignal.botReplyMessageId}) 删除完成`,
-				);
-				deletionTriggered = true; //  标记为已触发删除
-				break; //  跳出循环，完成删除操作
-			} else {
-				//  时间未到，或删除指令不存在，则等待一段时间后再次检查
-				//  如果删除指令已被其他请求处理 (例如，由于网络延迟导致重复请求)，则 storedDeletionSignal 可能为 null，此时也应该跳出循环，避免无限循环
-				if (!storedDeletionSignal) {
-					console.log('KV 中删除指令已不存在，跳出轮询');
-					break; //  跳出循环
-				}
-				// console.log(`删除就绪时间未到，等待 ${delayCheckInterval} 毫秒后再次检查... (当前时间: ${now}, 删除就绪时间: ${storedDeletionSignal.deletionReadyTimestamp})`); //  减少日志输出
-				await new Promise((resolve) => setTimeout(resolve, delayCheckInterval)); //  等待一段时间
-			}
-		} //  while 循环 结束
-
-		console.log('KV 轮询延迟删除处理完成');
-	} else {
-		console.error('发送命令回复消息失败，无法进行消息清理 (KV 轮询延迟)'); //  如果回复消息发送失败，则无法进行消息清理
-	}
 }

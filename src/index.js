@@ -1,7 +1,7 @@
 // src/index.js
 
 import { getJsonFromKv, sendErrorNotification, isUserBlacklisted } from './utils/utils';
-import { handleBotCommand, botCommands } from './handlers/command-handler';
+import { handleBotCommand } from './handlers/command-handler';
 import { isGroupInCooldown } from './utils/cooldown';
 import {
 	handleReplyToMessageQuestion,
@@ -9,7 +9,7 @@ import {
 	handleUniversalMessage,
 	handlePrivateMessage,
 } from './handlers/message-handler';
-import { setBotCommands, sendTelegramMessage } from './api/telegram-api';
+import { sendTelegramMessage } from './api/telegram-api';
 import { TimerDO } from './utils/timer_do';
 
 export { TimerDO };
@@ -202,31 +202,4 @@ export default {
 			return new Response('Method Not Allowed', { status: 405 });
 		}
 	},
-	// scheduled 事件监听器
-	// async scheduled(event, env, ctx) {
-	// 	console.log('Cron trigger event:', event); // 打印 event 对象，方便调试
-	// 	try {
-	// 		switch (event.cron) {
-	// 			// case '59 15 * * *': // UTC 14:00 触发 stopDailyRecordAndSummarize
-	// 			// 	// console.log('Cron trigger: stopDailyRecordAndSummarize');
-	// 			// 	// await stopDailyRecordAndSummarize(env, sendTelegramMessage);
-	// 			// 	break;
-	// 			// case '0 16 * * *': // UTC 16:00 触发 startDailyRecord
-	// 			// 	// console.log('Cron trigger: startDailyRecord');
-	// 			// 	// await startDailyRecord(env, sendTelegramMessage);
-	// 			// 	break;
-	// 			case '0 14 * * 7':
-	// 				await clearGroupContextHistory(env, env.BOT_TOKEN, env.CONTEXT, env.IMAGE_DATA, -1002033703290, null);
-	// 				break;
-	// 			default:
-	// 				console.log('Unknown cron trigger:', event.cron); // 记录未知的 cron 表达式
-	// 				break;
-	// 		}
-	// 		return new Response('OK');
-	// 	} catch (error) {
-	// 		console.error(`Errot in scheduled task '${event.cron}': ${error}`);
-	// 		await sendErrorNotification(env, error, `index.js - scheduled - Errot in scheduled task '${event.cron}'`);
-	// 		return new Response('Bad');
-	// 	}
-	// },
 };

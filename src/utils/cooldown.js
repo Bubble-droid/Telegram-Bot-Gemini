@@ -106,21 +106,6 @@ export async function isGroupInCooldownForSearch(botConfigKvNamespace, searchCoo
 }
 
 /**
- * 记录群组的最后搜索请求时间戳 (独立搜索冷却 - 用于 /search 命令)
- * @param {KVNamespace} botConfigKvNamespace
- * @param {number} groupId
- * @returns {Promise<void>}
- */
-export async function recordSearchGroupRequestTimestamp(botConfigKvNamespace, groupId) {
-	//  !!!  函数名更明确：recordSearchGroupRequestTimestamp  !!!
-	//  !!!  搜索冷却 Key  !!!
-	const lastRequestTimestampKey = `cooldown:search:${groupId}`; //  !!!  搜索冷却专用 Key  !!!
-	const now = Date.now();
-	await putJsonToKv(botConfigKvNamespace, lastRequestTimestampKey, now);
-	console.log(`群组 ${groupId} 搜索冷却已激活，最后搜索请求时间戳已更新`); //  !!!  区分日志：搜索冷却  !!!
-}
-
-/**
  * 解析持续时间字符串 (例如 "1.5m", "30s") 为毫秒
  * @param {string} durationString  持续时间字符串，例如 "1.5m", "30s", "1h"
  * @returns {number}  毫秒数
